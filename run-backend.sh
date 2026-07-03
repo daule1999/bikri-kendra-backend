@@ -1,13 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./run-backend.sh          -> normal run
-#        ./run-backend.sh --debug  -> also opens JDWP on :5005 for VS Code "Attach" (see .vscode/launch.json)
+# Usage: ./run-backend.sh                    -> pull & run :main
+#        ./run-backend.sh <tag>               -> pull & run a specific tag (e.g. main-798abeb, v1.2.3)
+#        ./run-backend.sh --debug             -> also opens JDWP on :5005 for VS Code "Attach" (see .vscode/launch.json)
+#        ./run-backend.sh <tag> --debug       -> tag + debug, in either order
+IMAGE="ghcr.io/daule1999/vy/bikri-backend"
+TAG="main"
 DEBUG_ARGS=()
-if [ "${1:-}" = "--debug" ]; then
-  echo "==> Debug mode: JDWP will listen on 5005"
-  DEBUG_ARGS=(-p 5005:5005 -e "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
-fi
+
+for arg in "$@"; do
+  if [ "$arg" = "--debug" ]; then
+    echo "==> Debug mode: JDWP will listen on 5005"
+    DEBUG_ARGS=(-p 5005:5005 -e "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
+  else
+    TAG="$arg"
+  fi
+done
+
+echo "==> Deploying tag: $TAG"
+
+# 0. Stop & remove any previous backend container FIRST, before touching infra —
+#    otherwise a leftover container can hold a port that traefik/redis/zipkin need.
+echo "==> Stopping old bikri-backend container (if any)"
+docker stop bikri-backend >/dev/null 2>&1 || true
+docker rm -f bikri-backend >/dev/null 2>&1 || true
 
 # 1. Start infra (redis, traefik, zipkin) from bikri-kendra, if not already running.
 #    Run this script from anywhere; it cd's into the traefik folder itself.
@@ -58,19 +75,20 @@ JWT_SECRET="${JWT_SECRET:-SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj_
 JWT_ACCESS_TOKEN_TTL_MS="${JWT_ACCESS_TOKEN_TTL_MS:-10800000}"   # 3 hrs
 JWT_REFRESH_TOKEN_TTL_SEC="${JWT_REFRESH_TOKEN_TTL_SEC:-604800}" # 7 days
 
-# 2. Stop & remove any previous backend container.
-echo "==> Stopping old bikri-backend container (if any)"
-docker stop bikri-backend >/dev/null 2>&1 || true
-docker rm -f bikri-backend >/dev/null 2>&1 || true
+# 2. Pull latest image. The image is only published for linux/amd64 (see build.yml),
+#    so force that platform explicitly — otherwise Docker on Apple Silicon (arm64)
+#    tries to pull a nonexistent arm64 manifest and fails.
+echo "==> Pulling image (linux/amd64): $IMAGE:$TAG"
+docker pull --platform linux/amd64 "$IMAGE:$TAG"
 
-# 3. Pull latest image.
-echo "==> Pulling latest image"
-docker pull ghcr.io/daule1999/vy/bikri-backend:main
-
-# 4. Run backend, attached to the same network as redis/traefik/zipkin so it can
+# 3. Run backend, attached to the same network as redis/traefik/zipkin so it can
 #    reach them by container name instead of host.docker.internal.
-echo "==> Starting bikri-backend on network $NETWORK"
-docker run -d -p 8080:8080 \
+#    NOTE: host port 8081 (not 8080) — traefik's own compose config already publishes
+#    8080:8080 for its dashboard, so 8080 is reserved for traefik on this machine.
+#    Reach the backend directly at localhost:8081, or through traefik at :8090.
+BACKEND_HOST_PORT="${BACKEND_HOST_PORT:-8081}"
+echo "==> Starting bikri-backend on network $NETWORK (host port $BACKEND_HOST_PORT -> container 8080)"
+docker run -d -p "${BACKEND_HOST_PORT}:8080" \
   --platform linux/amd64 \
   --name bikri-backend \
   --network "$NETWORK" \
@@ -87,8 +105,8 @@ docker run -d -p 8080:8080 \
   -e JWT_REFRESH_TOKEN_TTL_SEC="${JWT_REFRESH_TOKEN_TTL_SEC}" \
   -e SPRING_REDIS_HOST=redis \
   -e SPRING_ZIPKIN_BASE_URL=http://zipkin:9411 \
-  "${DEBUG_ARGS[@]}" \
-  ghcr.io/daule1999/vy/bikri-backend:main
+  ${DEBUG_ARGS[@]+"${DEBUG_ARGS[@]}"} \
+  "$IMAGE:$TAG"
 
 echo "==> Done. Tailing logs (Ctrl+C to stop tailing, container keeps running)"
 docker logs -f bikri-backend

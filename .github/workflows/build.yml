@@ -17,9 +17,12 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: 
-      contents: read 
+    permissions:
+      contents: read
       packages: write
+    outputs:
+      immutable-tag: ${{ steps.tags.outputs.immutable }}
+      moving-tag: ${{ steps.tags.outputs.moving }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,6 +58,16 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE }}:${{ steps.tags.outputs.moving }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Show pushed image tags
+        run: |
+          echo "### Pushed to GHCR" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE }}:${{ steps.tags.outputs.immutable }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE }}:${{ steps.tags.outputs.moving }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE }}:${{ steps.tags.outputs.immutable }}"
+          echo "Pushed: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE }}:${{ steps.tags.outputs.moving }}"
 
   bump-gitops:
     needs: build
