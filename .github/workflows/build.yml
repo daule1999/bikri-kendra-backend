@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/bikri-gitops
+          repository: ${{ github.repository_owner }}/bikri-kendra-gitops
           token: ${{ secrets.GITOPS_PAT }}
 
       - name: Bump image tag + open PR
