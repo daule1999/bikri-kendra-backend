@@ -81,7 +81,7 @@ jobs:
           BRANCH="deploy/backend-$TAG"
           git checkout -b "$BRANCH"
           git commit -am "deploy(backend-monolith): $TAG" || exit 0
-          git push origin "$BRANCH"
-          gh pr create --fill --title "Deploy backend $TAG" --body "ArgoCD pull-based deploy."
+          git push --force origin "$BRANCH"
+          gh pr create --fill --title "Deploy backend $TAG" --body "ArgoCD pull-based deploy." || echo "PR already exists for $BRANCH"
         env:
           GH_TOKEN: ${{ secrets.GITOPS_PAT }}
