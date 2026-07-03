@@ -1,0 +1,61 @@
+server:
+  port: 8086              # NOT 8085 (billing). in-use: sales=8081 inventory=8082 user=8083 auth=8084 billing=8085
+  ssl:
+    enabled: false
+
+db:
+  host: ${DB_HOST:host.docker.internal}
+  port: ${DB_PORT:3306}
+  name: printer_db
+  username: ${DB_USERNAME:root}
+  password: ${DB_PASSWORD:}
+
+spring:
+  application:
+    name: printer-service
+
+  r2dbc:
+    url: r2dbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    username: ${db.username}
+    password: ${db.password}
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 25
+      max-idle-time: 30m
+      max-acquire-time: 5s
+
+  flyway:
+    enabled: true
+    url: jdbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    user: ${db.username}
+    password: ${db.password}
+    baseline-on-migrate: true
+    baseline-version: 1
+
+# Print-queue tuning
+printer:
+  reaper:
+    # A PROCESSING job with no terminal update after this many seconds is re-queued (G7/R7).
+    stale-seconds: ${PRINTER_STALE_SECONDS:120}
+    fixed-delay-ms: ${PRINTER_REAPER_DELAY_MS:30000}
+  job:
+    # own-billing jumps ahead; lower number = printed sooner (§5 / §16)
+    priority-own: 10
+    priority-normal: 100
+    max-payload-bytes: 262144   # 256 KB cap (R11)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health, info
+  endpoint:
+    prometheus:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans

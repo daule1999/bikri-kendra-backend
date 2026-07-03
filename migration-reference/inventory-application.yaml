@@ -1,0 +1,65 @@
+server:
+  port: 8082
+  ssl:
+    enabled: false
+
+logging:
+  level:
+    com.vy.sales.inventory: INFO
+
+db:
+  host: ${DB_HOST:host.docker.internal}
+  port: ${DB_PORT:3306}
+  name: inventory_db
+  username: ${DB_USERNAME:root}
+  password: ${DB_PASSWORD:}
+
+spring:
+  application:
+    name: inventory-service
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+
+  r2dbc:
+    url: r2dbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    username: ${db.username}
+    password: ${db.password}
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 25
+      max-idle-time: 30m
+      max-acquire-time: 5s
+
+  flyway:
+    enabled: true
+    url: jdbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    user: ${db.username}
+    password: ${db.password}
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  # jackson: time-zone and write-dates-as-timestamps removed — not valid in Jackson 3.x (Spring Boot 4).
+  # LocalDateTime serialization is handled by JacksonConfig.jacksonISTModule() instead.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health,info
+  endpoint:
+    prometheus:
+      enabled: true
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj}

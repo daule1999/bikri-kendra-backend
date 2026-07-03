@@ -1,0 +1,77 @@
+# =============================================================================
+# bikri-backend — merged configuration for the modular monolith.
+# One port, ONE database (bikri_db — see scripts/merge-databases.sh), one Redis.
+# Keys consolidated from the six former service application.yamls
+# (originals preserved in migration-reference/ for diffing).
+# =============================================================================
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: bikri-backend
+  main:
+    allow-bean-definition-overriding: false   # collisions must be fixed, not papered over
+  r2dbc:
+    url: r2dbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    username: ${db.username}
+    password: ${db.password}
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 20
+      max-idle-time: 8m          # BELOW MySQL wait_timeout — prevents the idle-500s
+      validation-query: SELECT 1
+  flyway:
+    url: jdbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    user: ${db.username}
+    password: ${db.password}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# Legacy keys — module classes still reference ${db.*} from their original configs
+db:
+  host: ${DB_HOST:localhost}
+  port: ${DB_PORT:3306}
+  name: ${DB_NAME:bikri_db}      # ← the ONE merged database
+  username: ${DB_USERNAME:root}
+  password: ${DB_PASSWORD:}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj}
+    issuer: "vy-auth-service"
+    access-token-expiry-miliseconds: 10800000       # 3 hrs
+    refresh-token-expiry-seconds: 604800            # 7 days
+
+# Inter-module clients still call over HTTP (WebClient) — pointed at THIS app (self-loop).
+# Replace with direct service-bean calls module by module later; behavior is identical now.
+services:
+  auth:
+    base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:${server.port}}
+  user:
+    base-url: ${USER_SERVICE_BASE_URL:http://localhost:${server.port}}
+  inventory:
+    base-url: ${INVENTORY_SERVICE_BASE_URL:http://localhost:${server.port}}
+  sales:
+    base-url: ${SALES_SERVICE_BASE_URL:http://localhost:${server.port}}
+  billing:
+    base-url: ${BILLING_SERVICE_BASE_URL:http://localhost:${server.port}}
+  printer:
+    base-url: ${PRINTER_SERVICE_BASE_URL:http://localhost:${server.port}}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO
+    com.vy: INFO

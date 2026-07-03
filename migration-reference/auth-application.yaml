@@ -1,0 +1,59 @@
+server:
+  port: 8084
+  ssl:
+    enabled: false
+
+db:
+  host: ${DB_HOST:host.docker.internal}
+  port: ${DB_PORT:3306}
+  name: ${DB_NAME:auth_db}
+  username: ${DB_USERNAME:root}
+  password: ${DB_PASSWORD:}
+
+spring:
+  application:
+    name: auth-service
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+
+  r2dbc:
+    url: r2dbc:mysql://${db.host}:${db.port}/${db.name}
+    username: ${db.username}
+    password: ${db.password}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health,info
+  endpoint:
+    prometheus:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj}
+    issuer: "vy-auth-service"
+    access-token-expiry-miliseconds: 10800000       # 3 hrs
+    refresh-token-expiry-seconds: 604800    # 7 days
+
+services:
+  user:
+    base-url: ${USER_SERVICE_BASE_URL:http://localhost:8083}
+  

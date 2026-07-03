@@ -1,0 +1,61 @@
+server:
+  port: 8083
+  ssl:
+    enabled: false
+
+db:
+  host: ${DB_HOST:host.docker.internal}
+  port: ${DB_PORT:3306}
+  name: user_db
+  username: ${DB_USERNAME:root}
+  password: ${DB_PASSWORD:}
+
+spring:
+  application:
+    name: User Service
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+
+  r2dbc:
+    url: r2dbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    username: ${db.username}
+    password: ${db.password}
+
+  flyway:
+    enabled: true
+    url: jdbc:mysql://${db.host}:${db.port}/${db.name}?serverTimezone=Asia/Kolkata
+    user: ${db.username}
+    password: ${db.password}
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  # jackson: time-zone and write-dates-as-timestamps removed — not valid in Jackson 3.x (Spring Boot 4).
+  # LocalDateTime serialization is handled by JacksonConfig.jacksonISTModule() instead.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus, health,info
+  endpoint:
+    prometheus:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
+services:
+  sales:
+    base-url: ${SALES_SERVICE_BASE_URL:http://localhost:8081}
