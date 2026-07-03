@@ -59,12 +59,9 @@ jobs:
   bump-gitops:
     needs: build
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITOPS_PAT }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # Fetches the target GitOps repository name using your organization dynamically
           repository: ${{ github.repository_owner }}/bikri-gitops
           token: ${{ secrets.GITOPS_PAT }}
 
@@ -86,3 +83,5 @@ jobs:
           git commit -am "deploy(backend-monolith): $TAG" || exit 0
           git push origin "$BRANCH"
           gh pr create --fill --title "Deploy backend $TAG" --body "ArgoCD pull-based deploy."
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_PAT }}
