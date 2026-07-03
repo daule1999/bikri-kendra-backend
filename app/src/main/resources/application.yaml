@@ -43,8 +43,8 @@ security:
   jwt:
     secret: ${JWT_SECRET:SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj_SadguruSadafalDeoJiMaharaj}
     issuer: "vy-auth-service"
-    access-token-expiry-miliseconds: 10800000       # 3 hrs
-    refresh-token-expiry-seconds: 604800            # 7 days
+    access-token-expiry-miliseconds: ${JWT_ACCESS_TOKEN_TTL_MS:10800000}   # default 3 hrs
+    refresh-token-expiry-seconds: ${JWT_REFRESH_TOKEN_TTL_SEC:604800}      # default 7 days
 
 # Inter-module clients still call over HTTP (WebClient) — pointed at THIS app (self-loop).
 # Replace with direct service-bean calls module by module later; behavior is identical now.
