@@ -64,7 +64,10 @@ for mod in auth user inventory sales billing printer; do
   cp "$SRC/$svc/src/main/resources/application.yaml" "migration-reference/$mod-application.yaml" 2>/dev/null || true
 
   # 3. delete boot classes + centralized classes
-  find "$mod/src/main/java" -name "*Application.java" -delete
+  # Only true Spring Boot mains — NOT every *Application.java (user-service has a
+  # @Component named BootstrapApplication that must survive).
+  (grep -rl --include="*Application.java" "@SpringBootApplication" "$mod/src/main/java" || true) \
+    | while read -r bootclass; do rm -f "$bootclass"; done
   for c in $CENTRALIZED; do
     find "$mod/src/main/java" -name "$c.java" -delete
   done

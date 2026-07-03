@@ -34,13 +34,14 @@ public class MultiModuleFlywayConfig {
     if (url.startsWith("jdbc:mysql:") && !url.contains("createDatabaseIfNotExist=")) {
       cleanUrl += (url.contains("?") ? "&" : "?") + "createDatabaseIfNotExist=true";
     }
+    final String dataSourceUrl = cleanUrl; // effectively-final copy for the lambda
 
     List<Flyway> instances =
         MODULES.stream()
             .map(
                 module ->
                     Flyway.configure()
-                        .dataSource(cleanUrl, user, password)
+                        .dataSource(dataSourceUrl, user, password)
                         .locations("classpath:db/migration/" + module)
                         .table("flyway_schema_history_" + module)
                         .baselineOnMigrate(true)

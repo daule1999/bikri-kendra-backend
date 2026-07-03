@@ -15,8 +15,9 @@ app/        BikriBackendApplication (com.vy), JwtAuthWebFilter (replaces Traefik
 # 1. (already done here) pull service code from ../bikri-kendra — re-run after upstream changes
 ./scripts/migrate.sh ../bikri-kendra
 
-# 2. build — THIS IS THE REAL VERIFICATION; fix anything it reports (see Known checks below)
-./mvnw clean package -DskipTests
+# 2. build + install module jars to ~/.m2 (install, not package — `spring-boot:run -pl app`
+#    resolves the sibling modules from the local repo)
+./mvnw clean install -DskipTests
 
 # 3. one-time DB merge: auth_db/user_db/…/printer_db → bikri_db (backup + dry-run built in)
 ./scripts/merge-databases.sh --dry-run
@@ -58,7 +59,8 @@ DB_PASSWORD=... JWT_SECRET=... ./mvnw spring-boot:run -pl app
 2. Empty placeholder files (deleted classes the workspace couldn't physically remove — see `scripts/empty-placeholders.txt`): run `find . -name "*.java" -empty -delete` once. They are compile-safe either way.
 3. Tests were not migrated (they referenced the per-service boot apps). Port the valuable ones to `app/src/test` against the monolith context.
 4. Cutover: deploy this instead of the six services + Traefik backend routes; set frontend `INTERNAL_API_BASE_URL=http://<host>:8080`. Keep the old images around for one event as rollback.
-5. Sales' reports still call inventory over the self-loop — the natural next refactor is replacing `ReportServiceImpl`'s WebClient joins with direct repository queries (kills the cross-service report inconsistency class entirely).
+5. ~~Sales' reports still call inventory over the self-loop~~ **DONE**: `ReportServiceImpl` now reads inventory (`counter_stocks`), products, categories, and users **directly from the merged `bikri_db` via SQL** (`SalesAnalyticsRepository.getInventoryEventSummary/getProductCatalog/getAllCategories/getUsersByIds`). Zero HTTP calls remain in any report; the N-calls-per-user lookup became one `IN` query. This is the merged-DB payoff: future report work can JOIN `sales_order × counter_stocks × product × category × users` in single queries.
+6. **Do not re-run `scripts/migrate.sh`** without `--force` — the tree now contains hand-written monolith code (the SQL joins above); a re-copy from bikri-kendra would erase it. The script guards against this with a `.migrated` marker.
 
 ## Deploy
 

@@ -31,13 +31,15 @@ public class EventHeaderFilter implements WebFilter {
 
     log.debug("EventHeaderFilter checking request path: {}", path);
 
-    // Bypass check for products and category routes
-    if (path.contains("/products") || path.contains("/categories")) {
+    // MONOLITH: this filter used to run inside inventory-service only, so it enforced
+    // X-Event-Id on everything it saw. In the single app it sees EVERY request (login,
+    // users, auth…), so it must be scoped to inventory routes explicitly.
+    if (!path.startsWith("/api/inventory")) {
       return chain.filter(exchange);
     }
 
-    // Bypass common framework/actuator routes
-    if (path.startsWith("/actuator") || path.startsWith("/favicon.ico")) {
+    // Bypass check for products and category routes
+    if (path.contains("/products") || path.contains("/categories")) {
       return chain.filter(exchange);
     }
 
