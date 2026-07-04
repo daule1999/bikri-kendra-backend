@@ -320,54 +320,186 @@ public class InvoiceService {
                 log.info("Return processed for invoice id={} order={}", inv.getId(), orderNumber));
   }
 
-  public Flux<Invoice> searchInvoices(
+  public Mono<java.util.Map<String, Object>> searchHistory(
       java.util.List<Long> eventIds,
       java.util.List<String> shopIds,
       String status,
-      String searchTerm) {
+      String searchTerm,
+      int page,
+      int size) {
 
-    StringBuilder sql = new StringBuilder("SELECT * FROM invoices WHERE 1=1");
+    long offset = (long) page * size;
+
+    StringBuilder where = new StringBuilder(" WHERE 1=1");
 
     if (eventIds != null && !eventIds.isEmpty()) {
-      sql.append(" AND event_id IN (");
+      where.append(" AND i.event_id IN (");
       for (int i = 0; i < eventIds.size(); i++) {
-        sql.append(eventIds.get(i));
-        if (i < eventIds.size() - 1) sql.append(",");
+        where.append(eventIds.get(i));
+        if (i < eventIds.size() - 1) where.append(",");
       }
-      sql.append(")");
+      where.append(")");
     }
 
     if (shopIds != null && !shopIds.isEmpty()) {
-      sql.append(" AND shop_id IN (");
+      where.append(" AND i.shop_id IN (");
       for (int i = 0; i < shopIds.size(); i++) {
-        sql.append("'").append(shopIds.get(i).replace("'", "''")).append("'");
-        if (i < shopIds.size() - 1) sql.append(",");
+        where.append(":shopId").append(i);
+        if (i < shopIds.size() - 1) where.append(",");
       }
-      sql.append(")");
+      where.append(")");
     }
 
     if (status != null && !status.trim().isEmpty()) {
-      sql.append(" AND status = :status");
+      where.append(" AND i.status = :status");
     }
 
     if (searchTerm != null && !searchTerm.trim().isEmpty()) {
-      sql.append(
-          " AND (customer_name LIKE :pattern OR customer_mobile LIKE :pattern OR invoice_no LIKE :pattern OR sales_order_number LIKE :pattern)");
+      where.append(
+          " AND (i.customer_name LIKE :pattern OR i.customer_mobile LIKE :pattern"
+              + " OR i.invoice_no LIKE :pattern OR i.sales_order_number LIKE :pattern)");
     }
 
-    sql.append(" ORDER BY billing_date DESC");
+    // JOIN invoices → sales_order on the natural key
+    String baseFrom = " FROM invoices i"
+        + " LEFT JOIN sales_order so ON so.order_number = i.sales_order_number";
 
-    DatabaseClient.GenericExecuteSpec spec = databaseClient.sql(sql.toString());
+    String dataSql  = "SELECT i.*, so.status AS order_status,"
+        + " so.cancellation_reason, so.receiving_printed"
+        + baseFrom + where
+        + " ORDER BY i.billing_date DESC LIMIT :size OFFSET :offset";
+
+    String countSql = "SELECT COUNT(*)" + baseFrom + where;
+
+    java.util.function.Function<DatabaseClient.GenericExecuteSpec, DatabaseClient.GenericExecuteSpec> bindParams =
+        spec -> {
+          DatabaseClient.GenericExecuteSpec s = spec;
+          if (shopIds != null) {
+            for (int i = 0; i < shopIds.size(); i++) s = s.bind("shopId" + i, shopIds.get(i));
+          }
+          if (status != null && !status.trim().isEmpty())   s = s.bind("status", status.trim());
+          if (searchTerm != null && !searchTerm.trim().isEmpty())
+            s = s.bind("pattern", "%" + searchTerm.trim() + "%");
+          return s;
+        };
+
+    Flux<com.vy.sales.billing.dto.BillingHistoryRow> data = bindParams
+        .apply(databaseClient.sql(dataSql))
+        .bind("size", size)
+        .bind("offset", offset)
+        .map((row, meta) -> com.vy.sales.billing.dto.BillingHistoryRow.builder()
+            .invoiceId(row.get("id", Long.class))
+            .invoiceNo(row.get("invoice_no", String.class))
+            .salesOrderNumber(row.get("sales_order_number", String.class))
+            .eventId(row.get("event_id", Long.class))
+            .shopId(row.get("shop_id", Long.class) != null
+                ? String.valueOf(row.get("shop_id", Long.class)) : null)
+            .sellerId(row.get("seller_id", Long.class))
+            .sellerName(row.get("seller_name", String.class))
+            .billedBy(row.get("billed_by", Long.class))
+            .customerName(row.get("customer_name", String.class))
+            .customerMobile(row.get("customer_mobile", String.class))
+            .customerGstin(row.get("customer_gstin", String.class))
+            .subtotalAmount(row.get("subtotal_amount", java.math.BigDecimal.class))
+            .discountAmount(row.get("discount_amount", java.math.BigDecimal.class))
+            .taxAmount(row.get("tax_amount", java.math.BigDecimal.class))
+            .netAmount(row.get("net_amount", java.math.BigDecimal.class))
+            .invoiceStatus(row.get("status", String.class))
+            .billingDate(row.get("billing_date", LocalDateTime.class))
+            .createdAt(row.get("created_at", LocalDateTime.class))
+            .updatedAt(row.get("updated_at", LocalDateTime.class))
+            // sales_order JOIN columns
+            .orderStatus(row.get("order_status", String.class))
+            .cancellationReason(row.get("cancellation_reason", String.class))
+            .receivingPrinted(row.get("receiving_printed", Boolean.class))
+            .build())
+        .all();
+
+    Mono<Long> total = bindParams
+        .apply(databaseClient.sql(countSql))
+        .map((row, meta) -> row.get(0, Long.class))
+        .one();
+
+    return Mono.zip(data.collectList(), total)
+        .map(tuple -> {
+          java.util.Map<String, Object> result = new java.util.HashMap<>();
+          result.put("content", tuple.getT1());
+          result.put("page", page);
+          result.put("size", size);
+          result.put("totalElements", tuple.getT2());
+          result.put("totalPages", (int) Math.ceil((double) tuple.getT2() / size));
+          return result;
+        });
+  }
+
+  public Mono<java.util.Map<String, Object>> searchInvoices(
+      java.util.List<Long> eventIds,
+      java.util.List<String> shopIds,
+      String status,
+      String searchTerm,
+      int page,
+      int size) {
+
+    // Build the shared WHERE clause (no ORDER BY / LIMIT yet)
+    StringBuilder where = new StringBuilder(" WHERE 1=1");
+
+    // eventIds: safe — Long values only, no injection risk
+    if (eventIds != null && !eventIds.isEmpty()) {
+      where.append(" AND event_id IN (");
+      for (int i = 0; i < eventIds.size(); i++) {
+        where.append(eventIds.get(i));
+        if (i < eventIds.size() - 1) where.append(",");
+      }
+      where.append(")");
+    }
+
+    // shopIds: bind as named params to prevent SQL injection
+    if (shopIds != null && !shopIds.isEmpty()) {
+      where.append(" AND shop_id IN (");
+      for (int i = 0; i < shopIds.size(); i++) {
+        where.append(":shopId").append(i);
+        if (i < shopIds.size() - 1) where.append(",");
+      }
+      where.append(")");
+    }
 
     if (status != null && !status.trim().isEmpty()) {
-      spec = spec.bind("status", status.trim());
+      where.append(" AND status = :status");
     }
 
     if (searchTerm != null && !searchTerm.trim().isEmpty()) {
-      spec = spec.bind("pattern", "%" + searchTerm.trim() + "%");
+      where.append(
+          " AND (customer_name LIKE :pattern OR customer_mobile LIKE :pattern"
+              + " OR invoice_no LIKE :pattern OR sales_order_number LIKE :pattern)");
     }
 
-    return spec.map(
+    long offset = (long) page * size;
+    String dataSql  = "SELECT * FROM invoices" + where + " ORDER BY billing_date DESC LIMIT :size OFFSET :offset";
+    String countSql = "SELECT COUNT(*) FROM invoices" + where;
+
+    // Helper to bind all shared params onto a spec
+    java.util.function.Function<DatabaseClient.GenericExecuteSpec, DatabaseClient.GenericExecuteSpec> bindParams =
+        spec -> {
+          DatabaseClient.GenericExecuteSpec s = spec;
+          if (shopIds != null && !shopIds.isEmpty()) {
+            for (int i = 0; i < shopIds.size(); i++) {
+              s = s.bind("shopId" + i, shopIds.get(i));
+            }
+          }
+          if (status != null && !status.trim().isEmpty()) {
+            s = s.bind("status", status.trim());
+          }
+          if (searchTerm != null && !searchTerm.trim().isEmpty()) {
+            s = s.bind("pattern", "%" + searchTerm.trim() + "%");
+          }
+          return s;
+        };
+
+    Flux<Invoice> data = bindParams
+        .apply(databaseClient.sql(dataSql))
+        .bind("size", size)
+        .bind("offset", offset)
+        .map(
             (row, meta) ->
                 Invoice.builder()
                     .id(row.get("id", Long.class))
@@ -394,5 +526,21 @@ public class InvoiceService {
                     .updatedAt(row.get("updated_at", java.time.LocalDateTime.class))
                     .build())
         .all();
+
+    Mono<Long> total = bindParams
+        .apply(databaseClient.sql(countSql))
+        .map((row, meta) -> row.get(0, Long.class))
+        .one();
+
+    return Mono.zip(data.collectList(), total)
+        .map(tuple -> {
+          java.util.Map<String, Object> result = new java.util.HashMap<>();
+          result.put("content", tuple.getT1());
+          result.put("page", page);
+          result.put("size", size);
+          result.put("totalElements", tuple.getT2());
+          result.put("totalPages", (int) Math.ceil((double) tuple.getT2() / size));
+          return result;
+        });
   }
 }

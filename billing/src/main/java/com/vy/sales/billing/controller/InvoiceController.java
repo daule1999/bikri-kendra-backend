@@ -69,18 +69,34 @@ public class InvoiceController {
   }
 
   @GetMapping("/search")
-  public Flux<Invoice> search(
+  public Mono<java.util.Map<String, Object>> search(
       @RequestParam(value = "eventIds", required = false) java.util.List<Long> eventIds,
       @RequestParam(value = "shopIds", required = false) java.util.List<String> shopIds,
       @RequestParam(value = "status", required = false) String status,
-      @RequestParam(value = "searchTerm", required = false) String searchTerm) {
+      @RequestParam(value = "searchTerm", required = false) String searchTerm,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
     log.info(
-        "Received request to search invoices: eventIds={}, shopIds={}, status={}, searchTerm={}",
+        "Received request to search invoices: eventIds={}, shopIds={}, status={}, searchTerm={}, page={}, size={}",
         eventIds,
         shopIds,
         status,
-        searchTerm);
-    return invoiceService.searchInvoices(eventIds, shopIds, status, searchTerm);
+        searchTerm,
+        page,
+        size);
+    return invoiceService.searchInvoices(eventIds, shopIds, status, searchTerm, page, size);
+  }
+  @GetMapping("/history")
+  public Mono<java.util.Map<String, Object>> history(
+      @RequestParam(value = "eventIds", required = false) java.util.List<Long> eventIds,
+      @RequestParam(value = "shopIds", required = false) java.util.List<String> shopIds,
+      @RequestParam(value = "status", required = false) String status,
+      @RequestParam(value = "searchTerm", required = false) String searchTerm,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    log.info("BILLING_HISTORY_REQUEST eventIds={} shopIds={} status={} searchTerm={} page={} size={}",
+        eventIds, shopIds, status, searchTerm, page, size);
+    return invoiceService.searchHistory(eventIds, shopIds, status, searchTerm, page, size);
   }
 
   @GetMapping("/order/{orderNumber}/items")

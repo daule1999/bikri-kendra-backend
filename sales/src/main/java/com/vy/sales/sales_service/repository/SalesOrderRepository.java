@@ -21,6 +21,8 @@ public interface SalesOrderRepository extends ReactiveCrudRepository<SalesOrder,
 
   Flux<SalesOrder> findByShopId(String shopId);
 
+  Flux<SalesOrder> findByOrderNumberIn(java.util.List<String> orderNumbers);
+
   /** Paginated fetch for a given eventId, ordered by created_at DESC */
   @Query("SELECT * FROM sales_order WHERE event_id = :eventId ORDER BY created_at DESC LIMIT :size OFFSET :offset")
   Flux<SalesOrder> findByEventIdPaged(Long eventId, int size, long offset);

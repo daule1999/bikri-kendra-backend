@@ -219,8 +219,24 @@ public class SalesController {
   public Mono<java.util.Map<String, Object>> getAllSales(
       @RequestHeader(value = AppConstants.X_EVENT_ID, required = true) Long eventId,
       @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "20") int size) {
-    log.info("SALE_GET_ALL_REQUEST eventId={} page={} size={}", eventId, page, size);
+      @RequestParam(defaultValue = "20") int size,
+      @RequestParam(value = "orderNumbers", required = false) java.util.List<String> orderNumbers) {
+    log.info("SALE_GET_ALL_REQUEST eventId={} page={} size={} orderNumbers={}", eventId, page, size,
+        orderNumbers != null ? orderNumbers.size() : 0);
+    // When orderNumbers is provided, this is a targeted lookup (enrich-mode) — skip pagination.
+    if (orderNumbers != null && !orderNumbers.isEmpty()) {
+      return salesService.getByOrderNumbers(orderNumbers)
+          .collectList()
+          .map(list -> {
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            result.put("content", list);
+            result.put("page", 0);
+            result.put("size", list.size());
+            result.put("totalElements", (long) list.size());
+            result.put("totalPages", 1);
+            return result;
+          });
+    }
     return salesService.getAllSalesPaged(eventId, page, size);
   }
 
