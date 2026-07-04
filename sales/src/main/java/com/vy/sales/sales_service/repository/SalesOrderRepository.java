@@ -22,10 +22,10 @@ public interface SalesOrderRepository extends ReactiveCrudRepository<SalesOrder,
   Flux<SalesOrder> findByShopId(String shopId);
 
   /** Paginated fetch for a given eventId, ordered by created_at DESC */
-  @Query("SELECT * FROM sales_orders WHERE event_id = :eventId ORDER BY created_at DESC LIMIT :size OFFSET :offset")
+  @Query("SELECT * FROM sales_order WHERE event_id = :eventId ORDER BY created_at DESC LIMIT :size OFFSET :offset")
   Flux<SalesOrder> findByEventIdPaged(Long eventId, int size, long offset);
 
   /** Total count for pagination metadata */
-  @Query("SELECT COUNT(*) FROM sales_orders WHERE event_id = :eventId")
+  @Query("SELECT COUNT(*) FROM sales_order WHERE event_id = :eventId")
   Mono<Long> countByEventId(Long eventId);
 }
