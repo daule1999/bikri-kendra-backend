@@ -67,6 +67,8 @@ public class JwtUtil {
     Map<String, Object> claims = new HashMap<>();
     claims.put("roles", roles);
     claims.put("userId", userId);
+    final String jti = java.util.UUID.randomUUID().toString();
+    claims.put("jti", jti);
     final Date createdDate = new Date();
     final Date expirationDate = new Date(System.currentTimeMillis() + expirationTime);
 
@@ -123,6 +125,14 @@ public class JwtUtil {
     }
   }
 
+  /** Returns null for tokens issued before the jti claim existed — callers must handle that. */
+  public String extractJti(String token) {
+    Claims claims = getAllClaimsFromToken(token);
+    if (claims == null) return null;
+    Object jti = claims.get("jti");
+    return jti != null ? jti.toString() : null;
+  }
+
   public Long extractUserId(String token) {
     Claims claims = getAllClaimsFromToken(token);
     if (claims == null || claims.get("userId") == null) return null;
@@ -151,6 +161,7 @@ public class JwtUtil {
     claims.put("roles", roles);
     claims.put("userId", userId);
     claims.put("eventId", eventId);
+    claims.put("jti", java.util.UUID.randomUUID().toString());
     final Date createdDate = new Date();
     final Date expirationDate = new Date(System.currentTimeMillis() + accessTokenExpirationTime);
 

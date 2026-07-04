@@ -1,5 +1,6 @@
 package com.vy.app.security;
 
+import com.vy.sales.auth.service.SessionStoreService;
 import com.vy.sales.platform.security.JwtUtil;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class JwtAuthWebFilter implements WebFilter {
 
   private final JwtUtil jwtUtil;
   private final ReactiveStringRedisTemplate redisTemplate;
+  private final SessionStoreService sessionStoreService;
 
   private boolean isPublic(ServerHttpRequest req) {
     String p = req.getPath().value();
@@ -124,6 +126,28 @@ public class JwtAuthWebFilter implements WebFilter {
                       .build();
               return chain.filter(exchange.mutate().request(mutated).build());
             });
+
+    // Step 3 (shadow mode only): compare what the NEW session:{jti} check would have decided
+    // against the legacy force:logout:{userId} flag that actually gates the request below.
+    // This never denies a request by itself — it only logs disagreements so we can verify
+    // parity before cutting over. See SessionStoreService / SessionStoreProperties.
+    if (sessionStoreService.isEnabled()) {
+      String jti = jwtUtil.extractJti(token);
+      sessionStoreService
+          .sessionExists(jti)
+          .subscribe(
+              exists -> {
+                if (!exists) {
+                  log.info(
+                      "AUTH_SHADOW_SESSION_MISS jti={} userId={} uri={} — would deny under new"
+                          + " check, legacy check still authoritative",
+                      jti,
+                      userId,
+                      req.getPath());
+                }
+              },
+              e -> log.warn("AUTH_SHADOW_CHECK_ERROR userId={} reason={}", userId, e.getMessage()));
+    }
 
     // Force-logout check — fail open on Redis errors (same policy as the old /verify)
     return redisTemplate

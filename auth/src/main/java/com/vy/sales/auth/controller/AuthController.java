@@ -4,8 +4,10 @@ import com.vy.sales.auth.client.dto.AuthValidationResponse;
 import com.vy.sales.auth.dto.AuthRequest;
 import com.vy.sales.auth.dto.AuthResponse;
 import com.vy.sales.auth.service.AuthService;
+import com.vy.sales.auth.service.SessionStoreService;
 import com.vy.sales.platform.security.JwtUtil;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,7 @@ public class AuthController {
   private final JwtUtil jwtUtil;
   private final AuthService authService;
   private final ReactiveStringRedisTemplate redisTemplate;
+  private final SessionStoreService sessionStoreService;
 
   @Value("${security.jwt.access-token-expiry-miliseconds}")
   private long accessTokenExpiryMs;
@@ -83,37 +86,52 @@ public class AuthController {
                         String forceLogoutKey = FORCE_LOGOUT_KEY_PREFIX + userId;
                         Duration ttl = Duration.ofMillis(accessTokenExpiryMs);
 
+                        // Step 1/2 (new): additive DB + Redis session:{jti} write, gated behind
+                        // security.session-store.enabled. Best-effort — never fails the login.
+                        String jti = jwtUtil.extractJti(authResponse.getAccessToken());
+                        Mono<Void> newSessionStoreWrite =
+                            sessionStoreService.recordNewSession(
+                                jti,
+                                userId,
+                                ar.getUsername(),
+                                ttl,
+                                LocalDateTime.now().plus(ttl));
+
                         // Fetch old session token to invalidate from Caffeine
-                        return redisTemplate
-                            .opsForValue()
-                            .get(sessionKey)
-                            .doOnNext(
-                                oldToken -> {
-                                  jwtUtil.invalidate(oldToken);
-                                  log.debug("LOGIN_OLD_SESSION_INVALIDATED userId={}", userId);
-                                })
-                            .then(
-                                // Clear force-logout flag + store new session token
-                                redisTemplate
-                                    .delete(forceLogoutKey)
-                                    .then(
-                                        redisTemplate
-                                            .opsForValue()
-                                            .set(sessionKey, authResponse.getAccessToken(), ttl)))
-                            .doOnSuccess(
-                                ok ->
-                                    log.info(
-                                        "LOGIN_SESSION_STORED userId={} ttl={}ms",
-                                        userId,
-                                        accessTokenExpiryMs))
-                            .onErrorResume(
-                                e -> {
-                                  log.warn(
-                                      "LOGIN_SESSION_REDIS_ERROR userId={} reason={} — continuing",
-                                      userId,
-                                      e.getMessage());
-                                  return Mono.empty();
-                                })
+                        Mono<Void> legacySessionWrite =
+                            redisTemplate
+                                .opsForValue()
+                                .get(sessionKey)
+                                .doOnNext(
+                                    oldToken -> {
+                                      jwtUtil.invalidate(oldToken);
+                                      log.debug("LOGIN_OLD_SESSION_INVALIDATED userId={}", userId);
+                                    })
+                                .then(
+                                    // Clear force-logout flag + store new session token
+                                    redisTemplate
+                                        .delete(forceLogoutKey)
+                                        .then(
+                                            redisTemplate
+                                                .opsForValue()
+                                                .set(sessionKey, authResponse.getAccessToken(), ttl)))
+                                .doOnSuccess(
+                                    ok ->
+                                        log.info(
+                                            "LOGIN_SESSION_STORED userId={} ttl={}ms",
+                                            userId,
+                                            accessTokenExpiryMs))
+                                .onErrorResume(
+                                    e -> {
+                                      log.warn(
+                                          "LOGIN_SESSION_REDIS_ERROR userId={} reason={} — continuing",
+                                          userId,
+                                          e.getMessage());
+                                      return Mono.empty();
+                                    })
+                                .then();
+
+                        return Mono.when(legacySessionWrite, newSessionStoreWrite)
                             .thenReturn(ResponseEntity.ok().body(authResponse));
                       });
             })
@@ -336,10 +354,29 @@ public class AuthController {
                           return Mono.<ResponseEntity<?>>just(
                               ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
                         }
-                        return redisTemplate
-                            .opsForValue()
-                            .set(sessionKey, authResponse.getAccessToken(), ttl)
-                            .doOnSuccess(ok -> log.info("REFRESH_SESSION_STORED userId={}", userId))
+
+                        // Step 1/2 (new): the refreshed access token gets a fresh jti, so this
+                        // records a NEW session row/key rather than updating the old one — the
+                        // old jti's session:{jti} Redis key is left to expire naturally via its
+                        // own TTL (it's for the now-superseded access token, which is no longer
+                        // handed out, so there's nothing left that would look it up).
+                        String jti = jwtUtil.extractJti(authResponse.getAccessToken());
+                        Mono<Void> newSessionStoreWrite =
+                            sessionStoreService.recordNewSession(
+                                jti,
+                                userId,
+                                jwtUtil.extractUsername(refreshToken),
+                                ttl,
+                                LocalDateTime.now().plus(ttl));
+
+                        Mono<Void> legacySessionWrite =
+                            redisTemplate
+                                .opsForValue()
+                                .set(sessionKey, authResponse.getAccessToken(), ttl)
+                                .doOnSuccess(ok -> log.info("REFRESH_SESSION_STORED userId={}", userId))
+                                .then();
+
+                        return Mono.when(legacySessionWrite, newSessionStoreWrite)
                             .thenReturn((ResponseEntity<?>) ResponseEntity.ok(authResponse));
                       })
                   .onErrorResume(
@@ -387,7 +424,7 @@ public class AuthController {
     String forceLogoutKey = FORCE_LOGOUT_KEY_PREFIX + userId;
     Duration ttl = Duration.ofMillis(accessTokenExpiryMs);
 
-    Mono<ResponseEntity<Void>> result =
+    Mono<Void> legacyRevoke =
         redisTemplate
             .opsForValue()
             .get(sessionKey)
@@ -399,7 +436,13 @@ public class AuthController {
             .then(redisTemplate.delete(sessionKey))
             .then(redisTemplate.opsForValue().set(forceLogoutKey, "1", ttl))
             .doOnSuccess(ok -> log.info("FORCE_LOGOUT_SUCCESS userId={}", userId))
-            .thenReturn(ResponseEntity.<Void>ok().build());
+            .then();
+
+    // Step 1/2 (new): revoke the durable DB record(s) and delete the session:{jti} Redis key.
+    Mono<Void> newRevoke = sessionStoreService.revokeAllSessionsForUser(userId);
+
+    Mono<ResponseEntity<Void>> result =
+        Mono.when(legacyRevoke, newRevoke).thenReturn(ResponseEntity.<Void>ok().build());
 
     return result.onErrorResume(
         e -> {

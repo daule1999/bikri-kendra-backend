@@ -45,6 +45,15 @@ security:
     issuer: "vy-auth-service"
     access-token-expiry-miliseconds: ${JWT_ACCESS_TOKEN_TTL_MS:10800000}   # default 3 hrs
     refresh-token-expiry-seconds: ${JWT_REFRESH_TOKEN_TTL_SEC:604800}      # default 7 days
+  session-store:
+    # Kill switch for the DB+Redis session-store migration (see SessionStoreProperties /
+    # SessionStoreService / JwtAuthWebFilter). Default OFF: identical behavior to before this
+    # migration started. Flip to true to start writing auth_sessions rows + session:{jti} Redis
+    # keys, and to enable the shadow (log-only) revocation check in the filter.
+    enabled: ${AUTH_SESSION_STORE_ENABLED:false}
+    cleanup:
+      cron: ${AUTH_SESSION_CLEANUP_CRON:0 0 2 * * *}   # 2 AM daily by default
+      grace-hours: ${AUTH_SESSION_CLEANUP_GRACE_HOURS:24}
 
 # Inter-module clients still call over HTTP (WebClient) — pointed at THIS app (self-loop).
 # Replace with direct service-bean calls module by module later; behavior is identical now.
