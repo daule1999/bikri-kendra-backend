@@ -1126,10 +1126,6 @@ public class SalesService {
                     ex));
   }
 
-  public Flux<SalesOrder> getByOrderNumbers(java.util.List<String> orderNumbers) {
-    return orderRepo.findByOrderNumberIn(orderNumbers);
-  }
-
   public Mono<Map<String, Object>> getAllSalesPaged(Long eventId, int page, int size) {
     log.info("SALE_GET_ALL_REQUEST eventId={} page={} size={}", eventId, page, size);
     long offset = (long) page * size;
