@@ -216,13 +216,12 @@ public class SalesController {
   }
 
   @GetMapping("/all")
-  public Flux<SalesOrder> getAllSales(
-      @RequestHeader(value = AppConstants.X_EVENT_ID, required = true) Long eventId) {
-    log.info("SALE_GET_ALL_REQUEST eventId={}", eventId);
-    return salesService
-        .getAllSales(eventId)
-        .doOnComplete(() -> log.info("SALE_GET_ALL_SUCCESS"))
-        .doOnError(ex -> log.error("SALE_GET_ALL_FAILED reason={}", ex.getMessage(), ex));
+  public Mono<java.util.Map<String, Object>> getAllSales(
+      @RequestHeader(value = AppConstants.X_EVENT_ID, required = true) Long eventId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    log.info("SALE_GET_ALL_REQUEST eventId={} page={} size={}", eventId, page, size);
+    return salesService.getAllSalesPaged(eventId, page, size);
   }
 
   /** Cancel a sale (optional but useful) */

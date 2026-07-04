@@ -1126,14 +1126,30 @@ public class SalesService {
                     ex));
   }
 
-  public Flux<SalesOrder> getAllSales(Long eventId) {
-    log.info("SALE_GET_ALL_REQUEST eventId={}", eventId);
-    return eventId != null
-        ? orderRepo.findByEventId(eventId)
-        : orderRepo
-            .findAll()
-            .doOnComplete(() -> log.info("SALE_GET_ALL_SUCCESS"))
-            .doOnError(ex -> log.error("SALE_GET_ALL_FAILED reason={}", ex.getMessage(), ex));
+  public Mono<Map<String, Object>> getAllSalesPaged(Long eventId, int page, int size) {
+    log.info("SALE_GET_ALL_REQUEST eventId={} page={} size={}", eventId, page, size);
+    long offset = (long) page * size;
+
+    Flux<SalesOrder> data = eventId != null
+        ? orderRepo.findByEventIdPaged(eventId, size, offset)
+        : orderRepo.findAll();
+
+    Mono<Long> total = eventId != null
+        ? orderRepo.countByEventId(eventId)
+        : orderRepo.count();
+
+    return Mono.zip(data.collectList(), total)
+        .map(tuple -> {
+          Map<String, Object> result = new HashMap<>();
+          result.put("content", tuple.getT1());
+          result.put("page", page);
+          result.put("size", size);
+          result.put("totalElements", tuple.getT2());
+          result.put("totalPages", (int) Math.ceil((double) tuple.getT2() / size));
+          return result;
+        })
+        .doOnSuccess(r -> log.info("SALE_GET_ALL_SUCCESS totalElements={}", r.get("totalElements")))
+        .doOnError(ex -> log.error("SALE_GET_ALL_FAILED reason={}", ex.getMessage(), ex));
   }
 
   public Flux<ProductShopSalesDTO> getProductShopSalesSummary(Long eventId) {
