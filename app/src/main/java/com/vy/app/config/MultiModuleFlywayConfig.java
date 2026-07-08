@@ -15,14 +15,15 @@ import org.springframework.context.annotation.Configuration;
  * never collide across modules and checksums from the pre-merge databases stay valid — the
  * merge-databases.sh script renames each old history table accordingly.
  *
- * <p>auth has no migrations (auth_db had no tables) and is intentionally absent.
+ * <p>auth migrations live in classpath:db/migration/auth and track auth_sessions and related
+ * tables using flyway_schema_history_auth.
  */
 @Slf4j
 @Configuration
 public class MultiModuleFlywayConfig {
 
   private static final List<String> MODULES =
-      List.of("user", "inventory", "sales", "billing", "printer");
+      List.of("user", "inventory", "sales", "billing", "printer", "auth");
 
   @Bean
   public List<Flyway> flywayMigrations(

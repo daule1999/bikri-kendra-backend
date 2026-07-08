@@ -1,21 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./run-backend.sh                    -> pull & run :main
-#        ./run-backend.sh <tag>               -> pull & run a specific tag (e.g. main-798abeb, v1.2.3)
-#        ./run-backend.sh --debug             -> also opens JDWP on :5005 for VS Code "Attach" (see .vscode/launch.json)
-#        ./run-backend.sh <tag> --debug       -> tag + debug, in either order
+# Usage: ./run-backend.sh                         -> pull & run :main
+#        ./run-backend.sh <tag>                    -> pull & run a specific tag (e.g. main-798abeb, v1.2.3)
+#        ./run-backend.sh --debug                  -> also opens JDWP on :5005 for VS Code "Attach" (see .vscode/launch.json)
+#        ./run-backend.sh --tunnel                 -> start cloudflared tunnel after container is up
+#        ./run-backend.sh --logs                   -> tail container logs after startup
+#        ./run-backend.sh <tag> --debug --tunnel --logs  -> all flags, any order
 IMAGE="ghcr.io/daule1999/vy/bikri-backend"
 TAG="main"
 DEBUG_ARGS=()
+TUNNEL=false
+SHOW_LOGS=false
 
 for arg in "$@"; do
-  if [ "$arg" = "--debug" ]; then
-    echo "==> Debug mode: JDWP will listen on 5005"
-    DEBUG_ARGS=(-p 5005:5005 -e "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
-  else
-    TAG="$arg"
-  fi
+  case "$arg" in
+    --debug)
+      echo "==> Debug mode: JDWP will listen on 5005"
+      DEBUG_ARGS=(-p 5005:5005 -e "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
+      ;;
+    --tunnel)
+      TUNNEL=true
+      ;;
+    --logs)
+      SHOW_LOGS=true
+      ;;
+    *)
+      TAG="$arg"
+      ;;
+  esac
 done
 
 echo "==> Deploying tag: $TAG"
@@ -25,6 +38,9 @@ echo "==> Deploying tag: $TAG"
 echo "==> Stopping old bikri-backend container (if any)"
 docker stop bikri-backend >/dev/null 2>&1 || true
 docker rm -f bikri-backend >/dev/null 2>&1 || true
+
+echo "==> Killing any leftover cloudflared processes"
+pkill -f "cloudflared tunnel" 2>/dev/null || true
 
 # 1. Start infra (redis, traefik, zipkin) from bikri-kendra, if not already running.
 #    Run this script from anywhere; it cd's into the traefik folder itself.
@@ -114,5 +130,18 @@ docker run -d -p "${BACKEND_HOST_PORT}:8080" \
   ${DEBUG_ARGS[@]+"${DEBUG_ARGS[@]}"} \
   "$IMAGE:$TAG"
 
-echo "==> Done. Tailing logs (Ctrl+C to stop tailing, container keeps running)"
-docker logs -f bikri-backend
+if [ "$TUNNEL" = true ]; then
+  echo "==> Starting cloudflared tunnel -> http://localhost:${BACKEND_HOST_PORT}"
+  
+  # Ensure any dead tunnel processes are cleaned up first
+  pkill -f "cloudflared tunnel" 2>/dev/null || true
+  
+  # Start an anonymous tunnel in the background
+  cloudflared tunnel --url "http://localhost:${BACKEND_HOST_PORT}" &
+fi
+
+echo "==> Done. Container is running."
+if [ "$SHOW_LOGS" = true ]; then
+  echo "==> Tailing logs (Ctrl+C to stop tailing, container keeps running)"
+  docker logs -f bikri-backend
+fi
