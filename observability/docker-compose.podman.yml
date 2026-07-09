@@ -15,6 +15,11 @@
 #      podman compose -f docker-compose.yml -f docker-compose.podman.yml up -d
 services:
   alloy:
+    # SELinux (enforcing in the podman machine VM) blocks labeled containers from
+    # reading the host journal and sockets regardless of file permissions/ACLs.
+    # label=disable runs this container unconfined — standard for host-monitoring agents.
+    security_opt:
+      - label=disable
     volumes:
       # same container target as the base file → replaces the docker.sock mount
       - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro
@@ -29,6 +34,12 @@ services:
     # Podman-native per-container CPU/RAM/network metrics (cAdvisor can't name
     # containers on rootless Podman). Talks to the same podman socket.
     image: quay.io/navidys/prometheus-podman-exporter:latest
+    # image defaults to a non-root user, whose mapped host uid can't open the
+    # rootless socket ("permission denied"); container root maps to the socket
+    # owner's uid, which can
+    user: "0"
+    security_opt:
+      - label=disable
     environment:
       - CONTAINER_HOST=unix:///run/podman/podman.sock
     volumes:

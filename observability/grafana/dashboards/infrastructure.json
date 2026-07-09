@@ -51,7 +51,8 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
       "targets": [
-        { "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m]))", "legendFormat": "{{name}}" }
+        { "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m]))", "legendFormat": "{{name}}" },
+        { "expr": "sum by (name) (rate(podman_container_cpu_seconds_total[1m]))", "legendFormat": "{{name}} (podman)" }
       ]
     },
     {
@@ -60,7 +61,8 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
       "targets": [
-        { "expr": "container_memory_working_set_bytes{name!=\"\"}", "legendFormat": "{{name}}" }
+        { "expr": "container_memory_working_set_bytes{name!=\"\"}", "legendFormat": "{{name}}" },
+        { "expr": "sum by (name) (podman_container_mem_usage_bytes)", "legendFormat": "{{name}} (podman)" }
       ]
     },
     {

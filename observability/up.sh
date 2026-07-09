@@ -58,6 +58,20 @@ if [ "$RUNTIME" = "podman" ]; then
   export EXTRA_HOST_ENTRY="${EXTRA_HOST_ENTRY:-placeholder.invalid:127.0.0.1}"
   export MYSQL_HOST="${MYSQL_HOST:-host.containers.internal}"
   echo "==> Podman socket: $PODMAN_SOCK"
+
+  # Journal read access for Alloy: journal files are owned by real root, which is
+  # unmapped inside rootless containers. Grant the VM user (= container root) read
+  # access via ACL — one-time, inherited by future journal files (d: default ACL).
+  VM_UID="$(echo "$PODMAN_SOCK" | sed -n 's|.*/run/user/\([0-9]*\)/.*|\1|p')"
+  if [ -n "$VM_UID" ] && podman machine inspect >/dev/null 2>&1; then
+    echo "==> Granting journal read access to uid $VM_UID inside the VM (for Alloy)"
+    podman machine ssh -- "sudo setfacl -R -m u:${VM_UID}:rX -m d:u:${VM_UID}:rX /var/log/journal" \
+      || echo "!! setfacl failed — run it manually inside the VM, then restart alloy"
+  elif [ -n "$VM_UID" ]; then
+    echo "!! If Alloy logs 'journal: permission denied', run on the podman host:"
+    echo "   sudo setfacl -R -m u:${VM_UID}:rX -m d:u:${VM_UID}:rX /var/log/journal"
+  fi
+
   COMPOSE=(podman compose -f docker-compose.yml -f docker-compose.podman.yml)
 else
   export OBS_ATTACH_NETWORK="${OBS_ATTACH_NETWORK:-traefik_gateway-network}"
