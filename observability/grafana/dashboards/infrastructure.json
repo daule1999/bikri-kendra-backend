@@ -70,7 +70,9 @@
       "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
       "targets": [
         { "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!=\"\"}[1m]))", "legendFormat": "{{name}} rx" },
-        { "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[1m]))", "legendFormat": "{{name}} tx" }
+        { "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[1m]))", "legendFormat": "{{name}} tx" },
+        { "expr": "sum by (name) (rate(podman_container_net_input_total[1m]))", "legendFormat": "{{name}} rx (podman)" },
+        { "expr": "sum by (name) (rate(podman_container_net_output_total[1m]))", "legendFormat": "{{name}} tx (podman)" }
       ]
     },
     {
@@ -79,6 +81,24 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "expr": "sum(rate(loki_distributor_lines_received_total[1m]))", "legendFormat": "log lines/s" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Podman container CPU (podman-exporter)",
+      "description": "Populated on Podman deployments only. If empty, check Prometheus target 'podman' and browse metrics starting with podman_container_ to adjust queries.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum by (name) (rate(podman_container_cpu_seconds_total[1m]))", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Podman container memory (podman-exporter)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (name) (podman_container_mem_usage_bytes)", "legendFormat": "{{name}}" }
       ]
     }
   ]

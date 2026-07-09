@@ -1,0 +1,83 @@
+// Alloy config for PODMAN deployments.
+// Two log sources feed Loki:
+//  1. podman docker-compatible socket (containers whose log driver streams via the API)
+//  2. journald — Quadlet/systemd-run containers default to the journald log driver,
+//     which the socket API does NOT stream; this source catches them.
+// If a container ever shows up twice, it's using a driver both sources can see —
+// remove it from one side (rare).
+
+// ── Source 1: docker-compat socket ──────────────────────────────────────────
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label  = "image"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.json.receiver]
+  labels     = { job = "docker" }
+}
+
+// ── Source 2: journald (Quadlet containers) ─────────────────────────────────
+loki.relabel "journal" {
+  forward_to = []
+
+  // keep only journal entries that came from a container
+  rule {
+    source_labels = ["__journal_container_name"]
+    regex         = ".+"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__journal_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.source.journal "quadlet" {
+  path          = "/var/log/journal"
+  max_age       = "12h"
+  relabel_rules = loki.relabel.journal.rules
+  forward_to    = [loki.process.json.receiver]
+  labels        = { job = "journal" }
+}
+
+// ── Shared pipeline → Loki ──────────────────────────────────────────────────
+loki.process "json" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.json {
+    expressions = { level = "level" }
+  }
+
+  stage.labels {
+    values = { level = "" }
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

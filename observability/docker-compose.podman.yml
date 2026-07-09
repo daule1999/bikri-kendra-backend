@@ -18,5 +18,22 @@ services:
     volumes:
       # same container target as the base file → replaces the docker.sock mount
       - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # podman-specific config: adds journald collection — Quadlet containers use
+      # the journald log driver, which the docker-compat socket doesn't stream
+      - ./alloy/config.podman.alloy:/etc/alloy/config.alloy:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
       - alloy-data:/var/lib/alloy/data
+
+  podman-exporter:
+    # Podman-native per-container CPU/RAM/network metrics (cAdvisor can't name
+    # containers on rootless Podman). Talks to the same podman socket.
+    image: quay.io/navidys/prometheus-podman-exporter:latest
+    environment:
+      - CONTAINER_HOST=unix:///run/podman/podman.sock
+    volumes:
+      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock:ro
+    # enhance-metrics stamps the container NAME onto every metric (by default
+    # only podman_container_info has it, which left dashboards unable to group by name)
+    command: ["--collector.enable-all", "--collector.enhance-metrics"]
+    restart: unless-stopped

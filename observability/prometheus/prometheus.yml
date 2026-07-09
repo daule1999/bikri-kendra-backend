@@ -24,6 +24,12 @@ scrape_configs:
     static_configs:
       - targets: ["cadvisor:8080"]
 
+  # Podman-native container metrics (service only exists in the podman override;
+  # this target simply shows "down" on Docker deployments — harmless)
+  - job_name: podman
+    static_configs:
+      - targets: ["podman-exporter:9882"]
+
   # MySQL (connections, locks, QPS, buffer pool, ...)
   - job_name: mysql
     static_configs:

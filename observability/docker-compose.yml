@@ -52,7 +52,10 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # lets Prometheus scrape apps running on the host
+      # Docker: maps host.docker.internal → host-gateway (lets Prometheus scrape host-run apps).
+      # Podman doesn't support "host-gateway" (up.sh swaps in a harmless placeholder;
+      # podman resolves host.containers.internal natively instead).
+      - "${EXTRA_HOST_ENTRY:-host.docker.internal:host-gateway}"
     restart: unless-stopped
 
   alloy:
@@ -86,28 +89,32 @@ services:
     restart: unless-stopped
 
   cadvisor:
-    # Per-container CPU / RAM / network. Podman note: also mount
-    # /var/lib/containers:/var/lib/containers:ro and results may be partial.
+    # Per-container CPU / RAM / network. Reliable on Docker; on Podman it's
+    # partial (no container names) — podman-exporter in the podman override
+    # covers that case. CADVISOR_STORAGE_DIR is set by up.sh: /var/lib/docker
+    # on Docker, /var/lib/containers on Podman (mounting a nonexistent
+    # /var/lib/docker fails rootless).
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     privileged: true
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - ${CADVISOR_STORAGE_DIR:-/var/lib/docker}:${CADVISOR_STORAGE_DIR:-/var/lib/docker}:ro
     restart: unless-stopped
 
   mysqld-exporter:
     # MySQL health: connections, QPS, InnoDB row locks, buffer pool, slow queries.
-    # Requires a MySQL user with PROCESS, REPLICATION CLIENT, SELECT — see README.
+    # up.sh sources the infra .env.local and reuses the backend's DB user
+    # (DB_USERNAME/DB_PASSWORD) — override with MYSQL_EXPORTER_USER/PASSWORD.
     image: prom/mysqld-exporter:v0.15.1
     command:
       - --mysqld.address=${MYSQL_HOST:-host.docker.internal}:${MYSQL_PORT:-3306}
-      - --mysqld.username=${MYSQL_EXPORTER_USER:-exporter}
+      - --mysqld.username=${MYSQL_EXPORTER_USER:-root}
     environment:
-      - MYSQLD_EXPORTER_PASSWORD=${MYSQL_EXPORTER_PASSWORD:-exporter}
+      - MYSQLD_EXPORTER_PASSWORD=${MYSQL_EXPORTER_PASSWORD:-}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "${EXTRA_HOST_ENTRY:-host.docker.internal:host-gateway}"
     restart: unless-stopped
 
   grafana:

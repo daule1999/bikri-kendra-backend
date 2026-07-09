@@ -39,16 +39,14 @@ Latency percentiles need histogram buckets — enabled in `application.yaml`
 (`management.metrics.distribution.percentiles-histogram.http.server.requests: true`), so
 redeploy the backend once for the p50/p95/p99 panels to populate.
 
-### MySQL exporter — one-time DB user
+### MySQL exporter credentials
 
-```sql
-CREATE USER 'exporter'@'%' IDENTIFIED BY '<pick-a-password>' WITH MAX_USER_CONNECTIONS 3;
-GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.* TO 'exporter'@'%';
-```
-
-Then start the stack with `MYSQL_EXPORTER_PASSWORD=<that password>` (plus
-`MYSQL_HOST`/`MYSQL_PORT`/`MYSQL_EXPORTER_USER` if they differ from
-`host.docker.internal:3306`/`exporter`).
+`up.sh` sources the infra `.env.local` (same file the deploy scripts use, path
+overridable via `ENV_FILE=...`) and logs the exporter in with the **backend's own DB
+user** (`DB_USERNAME`/`DB_PASSWORD`, host from `DB_HOST`/`DB_PORT`). No separate user
+needed. Override explicitly with `MYSQL_EXPORTER_USER` / `MYSQL_EXPORTER_PASSWORD` /
+`MYSQL_HOST` / `MYSQL_PORT` if desired — e.g. a least-privilege user
+(`GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.*`) for production.
 
 Exporter caveats: on Docker Desktop / podman machine, node-exporter reports the Linux VM
 (that's where containers actually run). cAdvisor works best on Docker; on Podman its data
