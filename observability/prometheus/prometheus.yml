@@ -1,0 +1,42 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Spring Boot backend (Micrometer Prometheus registry, already in your pom).
+  # Same network as the backend container, so scrape it directly by name.
+  # If you ever run the backend on the host instead, switch the target to
+  # host.docker.internal:8081 (direct) or :8090 (via traefik).
+  - job_name: bikri-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["bikri-backend:8080"]
+        labels:
+          service: bikri-backend
+
+  # Host CPU/RAM/disk (the Linux VM on Docker Desktop / podman machine)
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Per-container CPU/RAM/network
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # MySQL (connections, locks, QPS, buffer pool, ...)
+  - job_name: mysql
+    static_configs:
+      - targets: ["mysqld-exporter:9104"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]

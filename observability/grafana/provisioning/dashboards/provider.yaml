@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: bikri-dashboards
+    type: file
+    folder: ""
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

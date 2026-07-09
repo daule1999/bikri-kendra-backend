@@ -1,0 +1,22 @@
+# Podman override — remaps the socket Alloy uses for container-log discovery.
+#
+# Podman exposes a Docker-COMPATIBLE API socket; we mount it at the path the
+# existing alloy/config.alloy already expects (/var/run/docker.sock), so the
+# Alloy config needs no changes.
+#
+# 1. Enable the socket (inside the podman machine VM on macOS):
+#      podman machine ssh bikri -- systemctl --user enable --now podman.socket
+# 2. Find its path:
+#      podman machine ssh bikri -- podman info --format '{{.Host.RemoteSocket.Path}}'
+#    (rootless is typically /run/user/<uid>/podman/podman.sock)
+# 3. Run:
+#      OBS_ATTACH_NETWORK=systemd-bikri-net \
+#      PODMAN_SOCK=/run/user/1000/podman/podman.sock \
+#      podman compose -f docker-compose.yml -f docker-compose.podman.yml up -d
+services:
+  alloy:
+    volumes:
+      # same container target as the base file → replaces the docker.sock mount
+      - ${PODMAN_SOCK:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data

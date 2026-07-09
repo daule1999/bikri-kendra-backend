@@ -1,0 +1,66 @@
+{
+  "uid": "bikri-frontend",
+  "title": "Frontend — Next.js",
+  "timezone": "Asia/Kolkata",
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "schemaVersion": 39,
+  "tags": ["bikri"],
+  "panels": [
+    {
+      "type": "timeseries", "title": "Frontend container CPU",
+      "description": "cAdvisor, filtered on container names matching ui/frontend — adjust the regex if your container is named differently.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\".*(ui|frontend|kendra).*\"}[1m]))", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Frontend container memory (working set)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "container_memory_working_set_bytes{name=~\".*(ui|frontend|kendra).*\"}", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Browser API calls /min (from shipped logs)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "expr": "sum(count_over_time({service=\"eventmanagement-frontend\"} |= `request completed` [1m]))", "legendFormat": "completed" },
+        { "expr": "sum(count_over_time({service=\"eventmanagement-frontend\", level=\"error\"} |= `API_CLIENT` [1m]))", "legendFormat": "failed" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Browser-observed API latency p95 (ms)",
+      "description": "Derived from apiClient durationMs in shipped browser logs — includes network + proxy + backend time, i.e. what users actually experience.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        { "expr": "quantile_over_time(0.95, {service=\"eventmanagement-frontend\"} |= `request completed` | json | unwrap data_durationMs [5m])", "legendFormat": "p95" },
+        { "expr": "quantile_over_time(0.50, {service=\"eventmanagement-frontend\"} |= `request completed` | json | unwrap data_durationMs [5m])", "legendFormat": "p50" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Frontend error logs /min (browser)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "expr": "sum by (level) (count_over_time({service=\"eventmanagement-frontend\", level=~\"error|warn\"}[1m]))", "legendFormat": "{{level}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Next.js server log volume /min (container stdout)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "expr": "sum by (container) (count_over_time({container=~\".*(ui|frontend|kendra).*\"}[1m]))", "legendFormat": "{{container}}" }
+      ]
+    }
+  ]
+}

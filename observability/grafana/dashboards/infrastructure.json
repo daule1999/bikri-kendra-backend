@@ -1,0 +1,85 @@
+{
+  "uid": "bikri-infra",
+  "title": "Infrastructure — Host & Containers",
+  "timezone": "Asia/Kolkata",
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "schemaVersion": 39,
+  "tags": ["bikri"],
+  "panels": [
+    {
+      "type": "timeseries", "title": "Host CPU usage",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1 }, "overrides": [] },
+      "targets": [
+        { "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m]))", "legendFormat": "cpu used" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Host memory",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes", "legendFormat": "used" },
+        { "expr": "node_memory_MemTotal_bytes", "legendFormat": "total" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Load average",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "node_load1", "legendFormat": "1m" },
+        { "expr": "node_load5", "legendFormat": "5m" },
+        { "expr": "node_load15", "legendFormat": "15m" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Disk space available",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "min by (mountpoint) (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"})", "legendFormat": "{{mountpoint}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Container CPU (all containers)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m]))", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Container memory (working set, all containers)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "container_memory_working_set_bytes{name!=\"\"}", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Container network I/O",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!=\"\"}[1m]))", "legendFormat": "{{name}} rx" },
+        { "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[1m]))", "legendFormat": "{{name}} tx" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Loki ingest rate (observability self-check)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(loki_distributor_lines_received_total[1m]))", "legendFormat": "log lines/s" }
+      ]
+    }
+  ]
+}

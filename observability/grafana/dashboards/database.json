@@ -1,0 +1,85 @@
+{
+  "uid": "bikri-mysql",
+  "title": "Database — MySQL",
+  "timezone": "Asia/Kolkata",
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "schemaVersion": 39,
+  "tags": ["bikri"],
+  "panels": [
+    {
+      "type": "stat", "title": "MySQL up",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "mysql_up", "legendFormat": "up" } ]
+    },
+    {
+      "type": "timeseries", "title": "Connections (connected / running / max)",
+      "gridPos": { "h": 8, "w": 10, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "mysql_global_status_threads_connected", "legendFormat": "connected" },
+        { "expr": "mysql_global_status_threads_running", "legendFormat": "running" },
+        { "expr": "mysql_global_variables_max_connections", "legendFormat": "max" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Queries per second",
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(mysql_global_status_queries[1m])", "legendFormat": "queries" },
+        { "expr": "rate(mysql_global_status_slow_queries[5m])", "legendFormat": "slow queries" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Locks — InnoDB row lock waits & table locks waited /s",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(mysql_global_status_innodb_row_lock_waits[5m])", "legendFormat": "innodb row lock waits" },
+        { "expr": "rate(mysql_global_status_table_locks_waited[5m])", "legendFormat": "table locks waited" },
+        { "expr": "rate(mysql_global_status_table_locks_immediate[5m])", "legendFormat": "table locks immediate" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "InnoDB row lock time spent /s (ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(mysql_global_status_innodb_row_lock_time[5m])", "legendFormat": "row lock time" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "InnoDB buffer pool (data vs total)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "mysql_global_status_innodb_buffer_pool_bytes_data", "legendFormat": "data" },
+        { "expr": "mysql_global_variables_innodb_buffer_pool_size", "legendFormat": "pool size" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Aborted connections /s",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(mysql_global_status_aborted_connects[5m])", "legendFormat": "aborted connects" },
+        { "expr": "rate(mysql_global_status_aborted_clients[5m])", "legendFormat": "aborted clients" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Network throughput",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "targets": [
+        { "expr": "rate(mysql_global_status_bytes_received[1m])", "legendFormat": "received" },
+        { "expr": "rate(mysql_global_status_bytes_sent[1m])", "legendFormat": "sent" }
+      ]
+    }
+  ]
+}

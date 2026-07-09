@@ -1,0 +1,89 @@
+{
+  "uid": "bikri-backend",
+  "title": "Backend — Spring Boot",
+  "timezone": "Asia/Kolkata",
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "schemaVersion": 39,
+  "tags": ["bikri"],
+  "panels": [
+    {
+      "type": "timeseries", "title": "Requests per second (by endpoint)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (uri) (rate(http_server_requests_seconds_count[1m]))", "legendFormat": "{{uri}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Latency p50 / p95 / p99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket[5m])))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket[5m])))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket[5m])))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Error rate (4xx / 5xx)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m]))", "legendFormat": "5xx" },
+        { "expr": "sum(rate(http_server_requests_seconds_count{status=~\"4..\"}[1m]))", "legendFormat": "4xx" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "CPU usage (JVM process vs system)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1 }, "overrides": [] },
+      "targets": [
+        { "expr": "process_cpu_usage", "legendFormat": "process" },
+        { "expr": "system_cpu_usage", "legendFormat": "system" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "JVM heap (used vs max)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})", "legendFormat": "heap used" },
+        { "expr": "sum(jvm_memory_max_bytes{area=\"heap\"})", "legendFormat": "heap max" },
+        { "expr": "sum(jvm_memory_used_bytes{area=\"nonheap\"})", "legendFormat": "non-heap used" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "GC pause time / s",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (action) (rate(jvm_gc_pause_seconds_sum[5m]))", "legendFormat": "{{action}}" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Live threads",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "jvm_threads_live_threads", "legendFormat": "live" },
+        { "expr": "jvm_threads_daemon_threads", "legendFormat": "daemon" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "R2DBC connection pool (all pool metrics)",
+      "description": "Discovery query — shows every r2dbc_pool_* series the app exports (acquired/allocated/pending/idle).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum by (__name__) ({__name__=~\"r2dbc_pool_.*\"})", "legendFormat": "{{__name__}}" }
+      ]
+    }
+  ]
+}

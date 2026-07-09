@@ -79,6 +79,27 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:1.0}   # trace every request; lower (e.g. 0.1) under heavy load
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # histogram buckets → p50/p95/p99 latency panels in Grafana
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}   # Tempo's Zipkin receiver
+
+# API request/response logging (see platform/.../logging/ApiLoggingWebFilter).
+# Every API call is logged as one structured event: method, uri, status, durationMs,
+# requestId, traceId (MDC), and truncated+redacted req/res bodies.
+observability:
+  api-logging:
+    enabled: ${API_LOGGING_ENABLED:true}
+    log-bodies: ${API_LOGGING_BODIES:true}
+    max-body-bytes: ${API_LOGGING_MAX_BODY_BYTES:10240}
+    exclude-path-prefixes:
+      - /actuator
 
 logging:
   level:

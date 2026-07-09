@@ -1,0 +1,24 @@
+# Tempo single-binary config. Receives spans via Zipkin (backend) and OTLP.
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    zipkin:               # backend micrometer-tracing/brave reports here (port 9411)
+    otlp:
+      protocols:
+        http:             # port 4318, available for future OTel instrumentation
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    # Configurable via TEMPO_RETENTION env (requires -config.expand-env=true,
+    # already set in docker-compose.yml). Default 14 days.
+    block_retention: ${TEMPO_RETENTION:-336h}

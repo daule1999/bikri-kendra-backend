@@ -1,0 +1,143 @@
+# Observability stack: Grafana + Loki (logs) + Prometheus (metrics) + Tempo (traces) + Alloy (log shipper)
+# Run:  docker compose up -d   (from this directory)
+# UI:   http://localhost:3001  (admin / admin on first login)
+#
+# Joins the EXISTING infra network where redis/traefik/zipkin already run, so
+# bikri-backend, the frontend, and this stack all reach each other by container name.
+#   Docker (run-backend.sh):  traefik_gateway-network  (the default below)
+#   Podman VM (run-podman.sh): OBS_ATTACH_NETWORK=systemd-bikri-net docker compose up -d
+# The network must already exist (started by the traefik/infra compose or Quadlet units).
+#
+# NOTE: Tempo replaces the standalone zipkin container — it speaks the same Zipkin
+# protocol on 9411, but 9411 is NOT published to the host to avoid clashing with the
+# existing zipkin. On the shared network, point the backend at http://tempo:9411.
+#
+# Image tags are pinned to versions known-good as of writing — bump as needed.
+services:
+  loki:
+    image: grafana/loki:3.4.2
+    command: -config.file=/etc/loki/loki-config.yaml -config.expand-env=true
+    environment:
+      - LOKI_RETENTION=${LOKI_RETENTION:-336h}   # log retention (default 14 days)
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.7.1
+    command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+    environment:
+      - TEMPO_RETENTION=${TEMPO_RETENTION:-336h}   # trace retention (default 14 days)
+    ports:
+      - "3200:3200"   # Tempo query API
+      # 9411 (Zipkin receiver) deliberately NOT published — the existing zipkin
+      # container may hold that host port. Backend reaches it as tempo:9411 in-network.
+      - "4318:4318"   # OTLP HTTP (optional, for future use)
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}   # metrics retention
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # lets Prometheus scrape apps running on the host
+    restart: unless-stopped
+
+  alloy:
+    # Ships stdout/stderr of ALL docker containers on this host into Loki,
+    # labeled by container name. No changes needed in app compose files.
+    image: grafana/alloy:v1.7.5
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # Podman: /run/podman/podman.sock
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  # ── Metric exporters ────────────────────────────────────────────────────────
+  # None publish host ports — Prometheus scrapes them over the shared network.
+
+  node-exporter:
+    # Host CPU / RAM / disk / load. (On Docker Desktop/Podman machine this
+    # reports the Linux VM the containers actually run in — that's the number
+    # that matters for container capacity.)
+    image: prom/node-exporter:v1.9.0
+    command: ["--path.rootfs=/host"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+
+  cadvisor:
+    # Per-container CPU / RAM / network. Podman note: also mount
+    # /var/lib/containers:/var/lib/containers:ro and results may be partial.
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: unless-stopped
+
+  mysqld-exporter:
+    # MySQL health: connections, QPS, InnoDB row locks, buffer pool, slow queries.
+    # Requires a MySQL user with PROCESS, REPLICATION CLIENT, SELECT — see README.
+    image: prom/mysqld-exporter:v0.15.1
+    command:
+      - --mysqld.address=${MYSQL_HOST:-host.docker.internal}:${MYSQL_PORT:-3306}
+      - --mysqld.username=${MYSQL_EXPORTER_USER:-exporter}
+    environment:
+      - MYSQLD_EXPORTER_PASSWORD=${MYSQL_EXPORTER_PASSWORD:-exporter}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    ports:
+      - "3001:3000"   # 3001 to avoid clashing with Next.js dev on 3000
+    environment:
+      - GF_USERS_DEFAULT_THEME=system
+      # Show all timestamps in the Grafana UI in IST regardless of the viewer's browser tz
+      - GF_DATE_FORMATS_DEFAULT_TIMEZONE=Asia/Kolkata
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+      - prometheus
+      - tempo
+    restart: unless-stopped
+
+volumes:
+  loki-data:
+  tempo-data:
+  prometheus-data:
+  alloy-data:
+  grafana-data:
+
+networks:
+  # Attach to the pre-existing infra network (redis/traefik/zipkin/bikri-backend).
+  # Override for Podman: OBS_ATTACH_NETWORK=systemd-bikri-net
+  default:
+    external: true
+    name: ${OBS_ATTACH_NETWORK:-traefik_gateway-network}

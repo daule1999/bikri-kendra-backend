@@ -1,11 +1,31 @@
 <configuration>
-  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-    <encoder>
-      <!-- Explicit UTC timestamp — JVM is IST but logs stay UTC for aggregators -->
-      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS, UTC} [%thread] %-5level %logger{36} - %msg%n</pattern>
-    </encoder>
-  </appender>
-  <root level="INFO">
-    <appender-ref ref="CONSOLE"/>
-  </root>
+  <!-- Default: human-readable console logs (local dev). -->
+  <springProfile name="!json-logs">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <!-- All log timestamps in IST -->
+        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS, Asia/Kolkata} [%thread] %-5level %logger{36} [%X{traceId:-}] - %msg%n</pattern>
+      </encoder>
+    </appender>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </springProfile>
+
+  <!-- Production / Docker: structured JSON logs for Loki.
+       Activate with SPRING_PROFILES_ACTIVE=json-logs.
+       LogstashEncoder emits MDC (traceId/spanId from micrometer-tracing) and
+       StructuredArguments from ApiLoggingWebFilter as first-class JSON fields. -->
+  <springProfile name="json-logs">
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <!-- @timestamp rendered in IST (with +05:30 offset, so it stays machine-parseable) -->
+        <timeZone>Asia/Kolkata</timeZone>
+        <customFields>{"service":"bikri-backend"}</customFields>
+      </encoder>
+    </appender>
+    <root level="INFO">
+      <appender-ref ref="JSON"/>
+    </root>
+  </springProfile>
 </configuration>
